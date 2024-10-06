@@ -241,6 +241,10 @@ async function handleSlackEvent(event, client, slackTeamId, telegramBots, defaul
       return;
     }
 
+    if (event.subtype === 'message_deleted' || event.bot_id) {
+      return;
+    }
+
     const slackChannelId = event.channel;
 
     getTelegramChatInfo(slackChannelId, slackTeamId, async (err, mappingInfo) => {
@@ -268,6 +272,7 @@ async function handleSlackEvent(event, client, slackTeamId, telegramBots, defaul
 
       // Proceed to send message to Telegram
       let userName = 'Unknown User';
+      console.log(event)
 
       if (event.user) {
         const userId = event.user;
@@ -433,7 +438,6 @@ async function openCreateBotModal(triggerId, client, channelId) {
     view: modalView,
   });
 
-  console.log("response id=", response.view.id)
 }
 
 // Function to process the bot token submission from the modal
@@ -457,31 +461,31 @@ function processBotTokenSubmission(payload, client, telegramBots) {
     };
   }
 
-  // Prepare the success modal
-  const modalSuccess = {
-    type: 'modal',
-    callback_id: 'bot_token_submission',
-    title: {
-      type: 'plain_text',
-      text: 'Create New Custom Bot',
-    },
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'plain_text',
-          text: '✅ Your Telegram bot has been successfully set up!',
-          emoji: true,
-        },
-      },
-    ],
-  };
+  // // Prepare the success modal
+  // const modalSuccess = {
+  //   type: 'modal',
+  //   callback_id: 'bot_token_submission',
+  //   title: {
+  //     type: 'plain_text',
+  //     text: 'Create New Custom Bot',
+  //   },
+  //   blocks: [
+  //     {
+  //       type: 'section',
+  //       text: {
+  //         type: 'plain_text',
+  //         text: '✅ Your Telegram bot has been successfully set up!',
+  //         emoji: true,
+  //       },
+  //     },
+  //   ],
+  // };
 
-  // Return the updated modal to Slack immediately
-  const response = {
-    response_action: 'update',
-    view: modalSuccess,
-  };
+  // // Return the updated modal to Slack immediately
+  // const response = {
+  //   response_action: 'update',
+  //   view: modalSuccess,
+  // };
 
   // Perform asynchronous operations after responding to Slack
   (async () => {
@@ -553,7 +557,7 @@ function processBotTokenSubmission(payload, client, telegramBots) {
     }
   })();
 
-  return response;
+  // return response;
 }
 
 // Function to prompt the user to connect the new bot to a Telegram group
@@ -780,7 +784,7 @@ function setupTelegramBot(botToken, teamId, app = null, telegramBots) {
       handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots);
     });
 
-    console.log(`Telegram bot @${telegramBotUsername} set up successfully.`);
+    console.log(`Telegram bot @${telegramBotUsername} set up successfully. 🚀`);
   }).catch((error) => {
     console.error('Error setting up Telegram bot:', error);
     sendErrorToAdmin(error);
@@ -790,6 +794,7 @@ function setupTelegramBot(botToken, teamId, app = null, telegramBots) {
 // Function to handle Telegram messages
 function handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots) {
   const telegramChatId = msg.chat.id.toString();
+  const telegramChatTitle = msg.chat.title.toString();
 
   // Check if the message indicates the bot was added to a group
   if (msg.new_chat_members) {
@@ -834,7 +839,7 @@ function handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots) {
                 await sendErrorToAdmin(err);
                 telegramBot.sendMessage(telegramChatId, 'An error occurred while creating the mapping.');
               } else {
-                telegramBot.sendMessage(telegramChatId, 'Successfully connected this Telegram group with Slack channel.');
+                telegramBot.sendMessage(telegramChatId, `Successfully connected this Telegram group (${telegramChatTitle}) with Slack channel. 🚀`);
 
                 // Notify Slack channel about the successful connection
                 getSlackClientForTeam(slackTeamId, async (err, client) => {
@@ -845,9 +850,35 @@ function handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots) {
                   }
 
                   try {
+                    // Delete the initial message
+                    db.get(
+                      'SELECT message_ts FROM channel_messages WHERE channel_id = ?',
+                      [slackChannelId],
+                      async (err, row) => {
+                        if (err) {
+                          console.error('Database error:', err);
+                          // Handle error
+                        } else if (row) {
+                          const messageTs = row.message_ts;
+
+                          try {
+                            await client.chat.delete({
+                              channel: slackChannelId,
+                              ts: messageTs,
+                            });
+
+                          } catch (error) {
+                            console.error('Error deleting message:', error);
+                            // Handle error
+                          }
+                        } else {
+                          // No message_ts found, handle accordingly
+                        }
+                      }
+                    );
                     await client.chat.postMessage({
                       channel: slackChannelId,
-                      text: 'Successfully connected this Slack channel with the Telegram group.',
+                      text: `Successfully connected this Slack Channel with Telegram group (${telegramChatTitle})`,
                     });
                     console.log(`Notified Slack channel ${slackChannelId} about successful connection.`);
                   } catch (error) {
