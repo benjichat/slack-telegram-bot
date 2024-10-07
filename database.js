@@ -70,6 +70,28 @@ function runMigrations() {
         message_ts TEXT NOT NULL
       );
     `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS channel_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slack_channel_id TEXT NOT NULL,
+        slack_workspace_id TEXT NOT NULL,
+        connection_type TEXT NOT NULL,
+        UNIQUE(slack_channel_id, slack_workspace_id)
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS slack_threads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slack_channel_id TEXT NOT NULL,
+        telegram_chat_id TEXT NOT NULL,
+        thread_ts TEXT NOT NULL,
+        UNIQUE(slack_channel_id, telegram_chat_id)
+      )
+    `);
+
+
   });
 }
 
@@ -93,7 +115,7 @@ function verifyTablesExist(db, callback) {
 
     const table = requiredTables.shift();
     db.get(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name =? `,
       [table],
       (err, row) => {
         if (err) {

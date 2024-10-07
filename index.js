@@ -10,16 +10,15 @@ const {
   cleanUpOldCodes,
   sendErrorToAdmin,
   handleSlackEvent,
-  handleDirectMessage,
   getSlackClientForTeam,
   setupTelegramBot,
   handleTelegramMessage,
   generateAndSendCode,
-  guideUserToCreateBot,
-  promptForBotToken,
-  getCustomBotForTeam,
+  openCreateBotModal,
   processBotTokenSubmission,
-  openCreateBotModal
+  getCustomBotForTeam,
+  openSetupConnectionModal,
+  processSetupConnectionSubmission
 } = require('./helper-functions');
 
 // Environment Variables
@@ -82,7 +81,7 @@ function initializeDefaultTelegramBot() {
       handleTelegramMessage(msg, defaultTelegramBotId, defaultTelegramBot, telegramBots);
     });
 
-    console.log(`Default Telegram bot @${defaultTelegramBotUsername} initialized.`);
+    console.log(`Telegram bot @${defaultTelegramBotUsername} set up successfully. 🚀`);
   }).catch((error) => {
     console.error('Error initializing default Telegram bot:', error);
   });
@@ -116,7 +115,6 @@ verifyTablesExist(db, async (missingTables) => {
       console.log(`Express server is listening on port ${PORT}`);
     });
 
-    console.log('Ready to Go');
   }
 });
 
@@ -200,13 +198,11 @@ app.post('/bot/slack/actions', async (req, res) => {
       await sendErrorToAdmin(error);
       return res.status(400).send('Invalid payload');
     }
-    console.log(payload)
-    
 
     const action = payload.actions ? payload.actions[0] : null;
     const actionValue = action ? action.value : null;
     const actionId = action ? action.action_id : null;
-    const teamId = payload.team.id 
+    const teamId = payload.team.id;
     const userId = payload.user.id;
     const channelId = payload.channel ? payload.channel.id : null;
 
@@ -218,47 +214,16 @@ app.post('/bot/slack/actions', async (req, res) => {
       }
 
       if (payload.type === 'block_actions') {
-        if (actionId === 'connect_teleconnectbot') {
-          // Option 1: Use the default TeleConnectBot
-          await generateAndSendCode(channelId, userId, client, teamId, defaultTelegramBotUsername, defaultTelegramBotId);
-          res.status(200).send();
-        } else if (actionId === 'connect_custom_bot') {
-          // Option 2: Use the team's custom bot
-          getCustomBotForTeam(teamId, async (err, botInfo) => {
-            if (err) {
-              console.error('Error fetching custom bot info:', err);
-              await sendErrorToAdmin(err);
-              res.status(500).send('Internal Server Error');
-            } else if (!botInfo) {
-              await client.chat.postMessage({
-                channel: channelId,
-                text: 'No custom Telegram bot configured for this workspace. Please set up your Telegram bot first.',
-              });
-              res.status(200).send();
-            } else {
-              await generateAndSendCode(channelId, userId, client, teamId, botInfo.telegram_bot_username, botInfo.telegram_bot_id);
-              res.status(200).send();
-            }
-          });
-        } else if (actionId === 'create_new_custom_bot') {
-          console.log(`payload.trigger_id = ${payload.trigger_id}`)
-          // Option 3: Open modal to create a new Telegram bot
-          await openCreateBotModal(triggerId = payload.trigger_id, client, channelId);
+        if (actionId === 'setup_connection') {
+          // Open modal to set up the connection
+          await openSetupConnectionModal(payload.trigger_id, client, channelId, teamId);
           res.status(200).send();
         } else {
           res.status(200).send();
         }
-      } else if (payload.type === 'view_submission') {
+      } else if (payload.type === 'view_submission' && payload.view.callback_id === 'setup_connection_submission') {
         // Handle modal submission
-        const response = processBotTokenSubmission(payload, client, telegramBots);
-  // Send the response back to Slack
-        res.status(200).json(response);
-      } else if (payload.type === 'block_actions' && actionId === 'connect_new_bot_to_channel') {
-        // User wants to connect the new bot to a channel
-        const botInfo = await getCustomBotForTeam(teamId);
-        if (botInfo) {
-          await generateAndSendCode(channelId, userId, client, teamId, botInfo.telegram_bot_username, botInfo.telegram_bot_id);
-        }
+        await processSetupConnectionSubmission(payload, client, telegramBots);
         res.status(200).send();
       } else {
         res.status(200).send();
