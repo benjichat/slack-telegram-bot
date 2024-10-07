@@ -595,31 +595,6 @@ function processBotTokenSubmission(payload, client, telegramBots) {
     };
   }
 
-  // // Prepare the success modal
-  // const modalSuccess = {
-  //   type: 'modal',
-  //   callback_id: 'bot_token_submission',
-  //   title: {
-  //     type: 'plain_text',
-  //     text: 'Create New Custom Bot',
-  //   },
-  //   blocks: [
-  //     {
-  //       type: 'section',
-  //       text: {
-  //         type: 'plain_text',
-  //         text: '✅ Your Telegram bot has been successfully set up!',
-  //         emoji: true,
-  //       },
-  //     },
-  //   ],
-  // };
-
-  // // Return the updated modal to Slack immediately
-  // const response = {
-  //   response_action: 'update',
-  //   view: modalSuccess,
-  // };
 
   // Perform asynchronous operations after responding to Slack
   (async () => {
@@ -814,6 +789,38 @@ function forwardTelegramMessageToSlack(msg, telegramBotId, telegramBot, telegram
               return;
             }
 
+              // Proceed to send message to Slack
+            const senderName = msg.from.first_name || 'Unknown';
+            const username = msg.from.username || '';
+            let messageText;
+
+            if (msg.text) {
+              messageText = `${msg.text}`;
+            } else if (msg.photo) {
+              messageText = 'sent a photo';
+              // Handle photo sending here if needed
+            } else {
+              messageText = 'sent a message';
+            }
+
+            // Get user's profile photo
+            let profilePhotoUrl = null;
+            try {
+              const userId = msg.from.id;
+              const photos = await telegramBot.getUserProfilePhotos(userId, { limit: 1 });
+
+              if (photos.total_count > 0) {
+                // Get the largest photo
+                const photoSizes = photos.photos[0];
+                const largestPhoto = photoSizes[photoSizes.length - 1];
+                const file = await telegramBot.getFile(largestPhoto.file_id);
+                profilePhotoUrl = `https://api.telegram.org/file/bot${telegramBot.token}/${file.file_path}`;
+              }
+            } catch (error) {
+              console.error('Error fetching user profile photo:', error);
+              await sendErrorToAdmin(error);
+            }
+
             // Proceed to send message to Slack
             let threadTs = null;
 
@@ -938,6 +945,8 @@ function setupTelegramBot(botToken, teamId, app = null, telegramBots) {
       }
     );
 
+    console.log(`${PUBLIC_URL}/bot/${telegramBotId}`)
+
     // Set webhook for the bot
     telegramBot.setWebHook(`${PUBLIC_URL}/bot/${telegramBotId}`);
 
@@ -952,6 +961,7 @@ function setupTelegramBot(botToken, teamId, app = null, telegramBots) {
 
     // Set up listeners for the bot
     telegramBot.on('message', (msg) => {
+      console.log("something happeing in this")
       handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots);
     });
 
