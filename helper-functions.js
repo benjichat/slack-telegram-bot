@@ -85,22 +85,6 @@ function getBotUserIdForTeam(teamId) {
   });
 }
 
-// Function to check if a team has any custom bots
-function teamHasCustomBot(teamId, callback) {
-  db.get(
-    'SELECT telegram_bot_username FROM team_bots WHERE team_id = ? AND telegram_bot_username IS NOT NULL LIMIT 1',
-    [teamId],
-    (err, row) => {
-      if (err) {
-        callback(err, null);
-      } else {
-        const hasCustomBot = row ? row.telegram_bot_username : null;
-        callback(null, hasCustomBot);
-      }
-    }
-  );
-}
-
 // Function to get the custom bot for a team
 function getCustomBotForTeam(teamId, callback) {
   db.get(
@@ -383,6 +367,9 @@ async function handleSlackEvent(event, client, slackTeamId, telegramBots, defaul
         return;
       }
 
+      console.log(" ---------------- MAPPINGS ---------------- \n\n ")
+      console.log(mappings)
+
       // Get the user's name
       let userName = 'Unknown User';
       if (event.user) {
@@ -432,6 +419,10 @@ async function handleSlackEvent(event, client, slackTeamId, telegramBots, defaul
           return;
         }
 
+        console.log(" ---------------- connectionType ---------------- \n\n ")
+        console.log(connectionType)
+          
+
         // Send the message to each linked Telegram chat
         for (const mappingInfo of mappings) {
           const telegramChatId = mappingInfo.telegram_chat_id;
@@ -439,20 +430,50 @@ async function handleSlackEvent(event, client, slackTeamId, telegramBots, defaul
 
           const telegramBot = telegramBots.get(telegramBotId);
 
+
           if (!telegramBot) {
             console.error(`Telegram bot with ID ${telegramBotId} not found.`);
             await sendErrorToAdmin(new Error(`Telegram bot with ID ${telegramBotId} not found.`));
             continue;
           }
 
-          try {
-            // Send the message to Telegram
-            await telegramBot.sendMessage(telegramChatId, messageText, { parse_mode: 'HTML' });
-            console.log(`Message sent to Telegram chat ${telegramChatId}`);
-          } catch (error) {
-            console.error('Error sending message to Telegram:', error);
-            await sendErrorToAdmin(error);
+          if (connectionType === 'multiple') {
+            // Get or create thread_ts for this Telegram chat and Slack channel
+            db.get(
+              'SELECT telegram_chat_id FROM slack_threads WHERE thread_ts = ?',
+              [event.thread_ts],
+              async (err, row) => {
+                if (err) {
+                  console.error('Database error:', err);
+                  await sendErrorToAdmin(err);
+                  return;
+                } else {
+                  try {
+                    if (row.telegram_chat_id !== telegramChatId){
+                      return
+                    }
+                    // Send the message to Telegram
+                    await telegramBot.sendMessage(row.telegram_chat_id, messageText, { parse_mode: 'HTML' });
+                    console.log(`Message sent to Telegram chat ${telegramChatId}`);
+                    return;
+                  } catch (error) {
+                    console.error('Error sending message to Telegram:', error);
+                    await sendErrorToAdmin(error);
+                  }
+                }
+              }
+            );
+          } else {
+            try {
+              // Send the message to Telegram
+              await telegramBot.sendMessage(telegramChatId, messageText, { parse_mode: 'HTML' });
+              console.log(`Message sent to Telegram chat ${telegramChatId}`);
+            } catch (error) {
+              console.error('Error sending message to Telegram:', error);
+              await sendErrorToAdmin(error);
+            }
           }
+
         }
       });
     });
@@ -946,27 +967,23 @@ function setupTelegramBot(botToken, teamId, app = null, telegramBots) {
     //   }
     // );
 
-    console.log(`${PUBLIC_URL}/bot/${telegramBotId}`)
-
-    // Set webhook for the bot
-    telegramBot.setWebHook(`${PUBLIC_URL}/bot/${telegramBotId}`)
-    .then(() => {
-      console.log(`Webhook set successfully for bot @${telegramBotUsername}`);
-    })
-    .catch((error) => {
-      console.error(`Error setting webhook for bot @${telegramBotUsername}:`, error);
-    });
+    // // Set webhook for the bot
+    // telegramBot.setWebHook(`${PUBLIC_URL}/bot/${telegramBotId}`)
+    // .then(() => {
+    //   console.log(`Webhook set successfully for bot @${telegramBotUsername}`);
+    // })
+    // .catch((error) => {
+    //   console.error(`Error setting webhook for bot @${telegramBotUsername}:`, error);
+    // });
 
     // Create a route to receive updates for this bot
     app.post(`/bot/${telegramBotId}`, (req, res) => {
-      console.log(`Received update for bot @${telegramBotUsername}`);
       telegramBot.processUpdate(req.body);
       res.sendStatus(200);
     });
 
     // Set up listeners for the bot
     telegramBot.on('message', (msg) => {
-      console.log("something happeing in this")
       handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots);
     });
 

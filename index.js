@@ -64,19 +64,19 @@ function initializeDefaultTelegramBot() {
     defaultTelegramBotUsername = botInfo.username;
     defaultTelegramBotId = botInfo.id.toString();
 
-    telegramBots.set(defaultTelegramBotId, defaultTelegramBot);
+    // telegramBots.set(defaultTelegramBotId, defaultTelegramBot);
 
-    console.log(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`)
+    // console.log(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`)
 
-    // Set webhook for the default bot
-    // defaultTelegramBot.setWebHook(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`);
-    defaultTelegramBot.setWebHook(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`)
-    .then(() => {
-      console.log(`Webhook set successfully for bot @${defaultTelegramBotUsername}`);
-    })
-    .catch((error) => {
-      console.error(`Error setting webhook for bot @${defaultTelegramBotUsername}:`, error);
-    });
+    // // Set webhook for the default bot
+    // // defaultTelegramBot.setWebHook(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`);
+    // defaultTelegramBot.setWebHook(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`)
+    // .then(() => {
+    //   console.log(`Webhook set successfully for bot @${defaultTelegramBotUsername}`);
+    // })
+    // .catch((error) => {
+    //   console.error(`Error setting webhook for bot @${defaultTelegramBotUsername}:`, error);
+    // });
 
     // Create a route to receive updates for this bot
     app.post(`/bot/${defaultTelegramBotId}`, (req, res) => {
