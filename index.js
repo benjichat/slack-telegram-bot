@@ -227,6 +227,9 @@ app.post('/bot/slack/actions', async (req, res) => {
           // Open modal to set up the connection
           await openSetupConnectionModal(payload.trigger_id, client, channelId, teamId);
           res.status(200).send();
+        } else if (actionId === 'add_connection') {
+          await processSetupConnectionSubmission(payload, client, telegramBots);
+          res.status(200).send();
         } else {
           res.status(200).send();
         }
