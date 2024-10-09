@@ -13,7 +13,6 @@ function runMigrations() {
         slack_channel_id TEXT NOT NULL,
         slack_workspace_id TEXT NOT NULL,
         telegram_bot_id TEXT NOT NULL,
-        slack_channel_name TEXT,
         UNIQUE(telegram_chat_id, slack_workspace_id, telegram_bot_id)
       );
     `);

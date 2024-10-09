@@ -753,7 +753,7 @@ async function generateAndSendCode(channelId, userId, client, slackTeamId, teleg
 
 // Function to forward Telegram messages to Slack
 function forwardTelegramMessageToSlack(msg, telegramBotId, telegramBot, telegramBots) {
-  console.log('---------------forwardTelegramMedssageToSlack---------------\n\n',msg)
+  console.log('--------------- forwardTelegramMedssageToSlack ---------------\n\n',msg)
   const telegramChatId = msg.chat.id.toString();
   const messageText = msg.text
 
@@ -926,38 +926,43 @@ function setupTelegramBot(botToken, teamId, app = null, telegramBots) {
   const telegramBot = new TelegramBot(botToken, { polling: false });
 
   telegramBot.getMe().then(async (botInfo) => {
+
     const telegramBotUsername = botInfo.username;
     const telegramBotId = botInfo.id.toString();
 
     telegramBots.set(telegramBotId, telegramBot);
 
     // Store the bot info in the database, associated with the team
-    db.run(
-      `INSERT INTO team_bots (team_id, telegram_bot_token, telegram_bot_username, telegram_bot_id)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(team_id, telegram_bot_id) DO UPDATE SET telegram_bot_token = excluded.telegram_bot_token`,
-      [teamId, botToken, telegramBotUsername, telegramBotId],
-      (err) => {
-        if (err) {
-          console.error('Database error:', err);
-          sendErrorToAdmin(err);
-        }
-      }
-    );
+    // db.run(
+    //   `INSERT INTO team_bots (team_id, telegram_bot_token, telegram_bot_username, telegram_bot_id)
+    //    VALUES (?, ?, ?, ?)
+    //    ON CONFLICT(team_id, telegram_bot_id) DO UPDATE SET telegram_bot_token = excluded.telegram_bot_token`,
+    //   [teamId, botToken, telegramBotUsername, telegramBotId],
+    //   (err) => {
+    //     if (err) {
+    //       console.error('Database error:', err);
+    //       sendErrorToAdmin(err);
+    //     }
+    //   }
+    // );
 
     console.log(`${PUBLIC_URL}/bot/${telegramBotId}`)
 
     // Set webhook for the bot
-    telegramBot.setWebHook(`${PUBLIC_URL}/bot/${telegramBotId}`);
+    telegramBot.setWebHook(`${PUBLIC_URL}/bot/${telegramBotId}`)
+    .then(() => {
+      console.log(`Webhook set successfully for bot @${telegramBotUsername}`);
+    })
+    .catch((error) => {
+      console.error(`Error setting webhook for bot @${telegramBotUsername}:`, error);
+    });
 
     // Create a route to receive updates for this bot
-    if (app) {
-      app.post(`/bot/${telegramBotId}`, (req, res) => {
-        console.log(`Received update for bot @${telegramBotUsername}`);
-        telegramBot.processUpdate(req.body);
-        res.sendStatus(200);
-      });
-    }
+    app.post(`/bot/${telegramBotId}`, (req, res) => {
+      console.log(`Received update for bot @${telegramBotUsername}`);
+      telegramBot.processUpdate(req.body);
+      res.sendStatus(200);
+    });
 
     // Set up listeners for the bot
     telegramBot.on('message', (msg) => {
@@ -965,7 +970,6 @@ function setupTelegramBot(botToken, teamId, app = null, telegramBots) {
       handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots);
     });
 
-    console.log(`Telegram bot @${telegramBotUsername} set up successfully. 🚀`);
   }).catch((error) => {
     console.error('Error setting up Telegram bot:', error);
     sendErrorToAdmin(error);

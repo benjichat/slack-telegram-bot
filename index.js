@@ -66,8 +66,17 @@ function initializeDefaultTelegramBot() {
 
     telegramBots.set(defaultTelegramBotId, defaultTelegramBot);
 
+    console.log(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`)
+
     // Set webhook for the default bot
-    defaultTelegramBot.setWebHook(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`);
+    // defaultTelegramBot.setWebHook(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`);
+    defaultTelegramBot.setWebHook(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`)
+    .then(() => {
+      console.log(`Webhook set successfully for bot @${defaultTelegramBotUsername}`);
+    })
+    .catch((error) => {
+      console.error(`Error setting webhook for bot @${defaultTelegramBotUsername}:`, error);
+    });
 
     // Create a route to receive updates for this bot
     app.post(`/bot/${defaultTelegramBotId}`, (req, res) => {
@@ -81,7 +90,6 @@ function initializeDefaultTelegramBot() {
       handleTelegramMessage(msg, defaultTelegramBotId, defaultTelegramBot, telegramBots);
     });
 
-    console.log(`Telegram bot @${defaultTelegramBotUsername} set up successfully. 🚀`);
   }).catch((error) => {
     console.error('Error initializing default Telegram bot:', error);
   });
@@ -105,6 +113,7 @@ verifyTablesExist(db, async (missingTables) => {
         sendErrorToAdmin(err);
       } else {
         rows.forEach((row) => {
+          console.log(row.telegram_bot_token)
           setupTelegramBot(row.telegram_bot_token, row.team_id, app, telegramBots);
         });
       }
