@@ -65,7 +65,7 @@ function runMigrations() {
     db.run(`
       CREATE TABLE IF NOT EXISTS channel_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        channel_id TEXT NOT NULL UNIQUE,
+        channel_id TEXT NOT NULL,
         message_ts TEXT NOT NULL
       );
     `);

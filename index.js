@@ -18,7 +18,8 @@ const {
   processBotTokenSubmission,
   getCustomBotForTeam,
   openSetupConnectionModal,
-  processSetupConnectionSubmission
+  processSetupConnectionSubmission,
+  processSetupConnectionSubmissionForNewThread,
 } = require('./helper-functions');
 
 // Environment Variables
@@ -64,7 +65,7 @@ function initializeDefaultTelegramBot() {
     defaultTelegramBotUsername = botInfo.username;
     defaultTelegramBotId = botInfo.id.toString();
 
-    // telegramBots.set(defaultTelegramBotId, defaultTelegramBot);
+    telegramBots.set(defaultTelegramBotId, defaultTelegramBot);
 
     // console.log(`${PUBLIC_URL}/bot/${defaultTelegramBotId}`)
 
@@ -228,7 +229,9 @@ app.post('/bot/slack/actions', async (req, res) => {
           await openSetupConnectionModal(payload.trigger_id, client, channelId, teamId);
           res.status(200).send();
         } else if (actionId === 'add_connection') {
-          await processSetupConnectionSubmission(payload, client, telegramBots);
+          console.log(" ------------------ add_connection ------------------ ")
+          console.log(payload)
+          await processSetupConnectionSubmissionForNewThread(payload, client, telegramBots);
           res.status(200).send();
         } else {
           res.status(200).send();

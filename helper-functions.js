@@ -9,6 +9,8 @@ const TelegramBot = require('node-telegram-bot-api');
 // Environment Variables
 const {
   PUBLIC_URL,
+  TELEGRAM_BOT_USERNAME,
+  TELEGRAM_BOT_ID
 } = process.env;
 
 // Example cleanup function
@@ -37,6 +39,29 @@ function getTelegramChatInfos(slackChannelId, slackTeamId, callback) {
         callback(err, null);
       } else {
         callback(null, rows);
+      }
+    }
+  );
+}
+
+// Function to get Telegram bot info based on slackChannelId and slackTeamId
+function getTelegramBotInfo(slackChannelId, slackTeamId, callback) {
+  db.all(
+    `SELECT tb.telegram_bot_id, tb.telegram_bot_username
+     FROM mappings m
+     JOIN team_bots tb ON m.telegram_bot_id = tb.telegram_bot_id
+     WHERE m.slack_channel_id = ? AND m.slack_workspace_id = ?`,
+    [slackChannelId, slackTeamId],
+    (err, rows) => {
+      if (err) {
+        console.error('Database error:', err);
+        callback(err, null);
+      } else if (rows.length > 0) {
+        // Return the first matching result (assuming one bot per mapping)
+        callback(null, rows[0]);
+      } else {
+        // No matching records found
+        callback(null, null);
       }
     }
   );
@@ -101,7 +126,7 @@ function getCustomBotForTeam(teamId, callback) {
 }
 
 // Function to send interactive options message
-async function sendInteractiveOptionsMessage(channelId, client, hasCustomBot) {
+async function sendInteractiveOptionsMessage(channelId, client) {
   const blocks = [
     {
       type: 'section',
@@ -117,20 +142,21 @@ async function sendInteractiveOptionsMessage(channelId, client, hasCustomBot) {
           type: 'button',
           text: {
             type: 'plain_text',
-            style: 'primary',
             text: 'Set up connection',
             emoji: true,
           },
+          style: 'primary',
           value: 'setup_connection',
           action_id: 'setup_connection',
         },
       ],
     },
     {
-			"type": "divider",
-			"block_id": "divider1"
-		}
+      type: 'divider',
+    },
   ];
+
+  console.log(" ---------------- channelId in sendInteractiveOptions ---------------- \n\n ")
 
   const response = await client.chat.postMessage({
     channel: channelId,
@@ -141,10 +167,12 @@ async function sendInteractiveOptionsMessage(channelId, client, hasCustomBot) {
   // Store the message timestamp in the database
   const messageTs = response.ts;
 
+  console.log(" ---------------- messageTs Reponse in sendInteractiveOptions ---------------- \n\n ")
+  console.log(response)
+
   db.run(
     `INSERT INTO channel_messages (channel_id, message_ts)
-     VALUES (?, ?)
-     ON CONFLICT(channel_id) DO UPDATE SET message_ts = excluded.message_ts`,
+     VALUES (?, ?)`,
     [channelId, messageTs],
     (err) => {
       if (err) {
@@ -176,15 +204,14 @@ async function sendInteractiveOptionsMessageToAddThread(channelId, client) {
             text: 'Add Group',
             emoji: true,
           },
-          value: 'add_connection',
+          value: `add_connection`,
           action_id: 'add_connection',
         },
       ],
     },
     {
-			"type": "divider",
-			"block_id": "divider1"
-		}
+      type: 'divider',
+    },
   ];
 
   await client.chat.postMessage({
@@ -299,22 +326,25 @@ async function openSetupConnectionModal(triggerId, client, channelId, teamId) {
         view: modalView,
       });
 
-      // Store the message timestamp in the database
-      const messageTs = response.ts;
+      // // Store the message timestamp in the database
+      // const messageTs = response.ts;
 
-      db.run(
-        `INSERT INTO channel_messages (channel_id, message_ts)
-        VALUES (?, ?)
-        ON CONFLICT(channel_id) DO UPDATE SET message_ts = excluded.message_ts`,
-        [channelId, messageTs],
-        (err) => {
-          if (err) {
-            console.error('Database error:', err);
-          } else {
-            console.log(`Stored message_ts for channel ${channelId}`);
-          }
-        }
-      );
+      // console.log(" ---------------- messageTs Reponse ---------------- \n\n ")
+      // console.log("response", response)
+
+      // db.run(
+      //   `INSERT INTO channel_messages (channel_id, message_ts)
+      //   VALUES (?, ?)
+      //   ON CONFLICT(channel_id) DO UPDATE SET message_ts = excluded.message_ts`,
+      //   [channelId, messageTs],
+      //   (err) => {
+      //     if (err) {
+      //       console.error('Database error:', err);
+      //     } else {
+      //       console.log(`Stored message_ts for channel ${channelId}`);
+      //     }
+      //   }
+      // );
     }
   });
 }
@@ -335,8 +365,8 @@ async function processSetupConnectionSubmission(payload, client, telegramBots) {
   let botInfo;
   if (botSelectionValue.bot === 'teleconnectbot') {
     botInfo = {
-      telegram_bot_username: defaultTelegramBotUsername,
-      telegram_bot_id: defaultTelegramBotId,
+      telegram_bot_username: TELEGRAM_BOT_USERNAME,
+      telegram_bot_id: TELEGRAM_BOT_ID,
     };
   } else if (botSelectionValue.bot === 'custombot') {
     botInfo = await new Promise((resolve) => {
@@ -367,39 +397,9 @@ async function processSetupConnectionSubmission(payload, client, telegramBots) {
         resolve();
       } else {
         // Generate and send the code
-        
-        // Delete the initial message
         if (connectionType === 'single') {
           await generateAndSendCode(channelId, userId, client, teamId, botInfo.telegram_bot_username, botInfo.telegram_bot_id);
-          // db.get(
-          //   'SELECT message_ts FROM channel_messages WHERE channel_id = ?',
-          //   [channelId],
-          //   async (err, row) => {
-          //     if (err) {
-          //       console.error('Database error:', err);
-          //       // Handle error
-          //     } else if (row) {
-          //       const messageTs = row.message_ts;
-
-          //       try {
-          //         await client.chat.delete({
-          //           channel: channelId,
-          //           ts: messageTs,
-          //         });
-
-          //         // Send new message with options to add the bot to a group
-                  
-          //       } catch (error) {
-          //         console.error('Error deleting message:', error);
-          //         // Handle error
-          //       }
-          //     } else {
-          //       // No message_ts found, handle accordingly
-          //     }
-          //   }
-          // );
-          // await sendInteractiveOptionsMessage(channelId, client, telegramBotUsername);
-          // resolve();
+          resolve();
         } else {
           getAndDeleteMessageTs(teamId, channelId);
           await sendInteractiveOptionsMessageToAddThread(channelId, client);
@@ -411,41 +411,78 @@ async function processSetupConnectionSubmission(payload, client, telegramBots) {
   });
 }
 
-function getAndDeleteMessageTs(slackTeamId, channelId) {
-  getSlackClientForTeam(slackTeamId, async (err, client) => {
+async function processSetupConnectionSubmissionForNewThread(payload, client, telegramBots) {
+  const userId = payload.user.id;
+  const teamId = payload.team.id;
+  const slackChannelId = payload.channel.id;
+
+  // Example usage
+  getTelegramBotInfo(slackChannelId, teamId, (err, botInfo) => {
     if (err) {
-      console.error('Error getting Slack client:', err);
-      await sendErrorToAdmin(err);
-      return;
+      console.error('Error fetching bot info:', err);
+    } else if (botInfo) {
+      console.log('Telegram Bot ID:', botInfo.telegram_bot_id);
+      console.log('Telegram Bot Username:', botInfo.telegram_bot_username);
+      generateAndSendCode(slackChannelId, userId, client, teamId, botInfo.telegram_bot_username, botInfo.telegram_bot_id);
+    } else {
+      console.log('No bot info found for the given Slack channel and team.');
     }
-    db.get(
-      'SELECT message_ts FROM channel_messages WHERE channel_id = ?',
-      [channelId],
-      async (err, row) => {
-        if (err) {
-          console.error('Database error:', err);
-          // Handle error
-        } else if (row) {
-          const messageTs = row.message_ts;
-  
-          try {
-            await client.chat.delete({
-              channel: channelId,
-              ts: messageTs,
-            });
-  
-          } catch (error) {
-            console.error('Error deleting message:', error);
-            // Handle error
-          }
-        } else {
-          // No message_ts found, handle accordingly
-        }
-      }
-    );
   });
-  
 }
+
+function getAndDeleteMessageTs(slackTeamId, channelId) {
+    getSlackClientForTeam(slackTeamId, async (err, client) => {
+      if (err) {
+        console.error('Error getting Slack client:', err);
+        await sendErrorToAdmin(err);
+        return;
+      }
+  
+      // Use db.all to fetch all matching messages
+      db.all(
+        'SELECT message_ts FROM channel_messages WHERE channel_id = ?',
+        [channelId],
+        async (err, rows) => {
+          if (err) {
+            console.error('Database error:', err);
+            await sendErrorToAdmin(err);
+          } else if (rows && rows.length > 0) {
+            console.log(rows)
+            // Iterate over each message and delete it
+            for (const row of rows) {
+              const messageTs = row.message_ts;
+              try {
+                await client.chat.delete({
+                  channel: channelId,
+                  ts: messageTs,
+                });
+                console.log(`Successfully deleted message with ts: ${messageTs}`);
+  
+                // Optionally, delete the message from the database
+                db.run(
+                  'DELETE FROM channel_messages WHERE channel_id = ? AND message_ts = ?',
+                  [channelId, messageTs],
+                  (err) => {
+                    if (err) {
+                      console.error('Error deleting message from database:', err);
+                    } else {
+                      console.log(`Deleted message_ts ${messageTs} from database.`);
+                    }
+                  }
+                );
+              } catch (error) {
+                console.error(`Error deleting message with ts ${messageTs}:`, error);
+                await sendErrorToAdmin(error);
+              }
+            }
+          } else {
+            console.log('No messages found to delete.');
+            // Handle case when no messages are found, if necessary
+          }
+        }
+      );
+    });
+  }
 
 // Function to handle Slack events
 async function handleSlackEvent(event, client, slackTeamId, telegramBots, defaultTelegramBotUsername, defaultTelegramBotId) {
@@ -464,7 +501,7 @@ async function handleSlackEvent(event, client, slackTeamId, telegramBots, defaul
         if (event.user === botUserId) {
           // Bot was added to a channel
           const channelId = event.channel;
-
+          console.log(" ---------------- bot is Joining ---------------- \n\n ")
           // Send interactive message with options
           await sendInteractiveOptionsMessage(channelId, client);
           return;
@@ -798,7 +835,7 @@ function processBotTokenSubmission(payload, client, telegramBots) {
                     });
 
                     // Send new message with options to add the bot to a group
-                    await sendInteractiveOptionsMessage(channelId, client, telegramBotUsername);
+                    await sendInteractiveOptionsMessage(channelId, client);
                   } catch (error) {
                     console.error('Error deleting message:', error);
                     // Handle error
@@ -904,8 +941,7 @@ async function generateAndSendCode(channelId, userId, client, slackTeamId, teleg
 
         db.run(
           `INSERT INTO channel_messages (channel_id, message_ts)
-          VALUES (?, ?)
-          ON CONFLICT(channel_id) DO UPDATE SET message_ts = excluded.message_ts`,
+          VALUES (?, ?)`,
           [channelId, messageTs],
           (err) => {
             if (err) {
@@ -921,6 +957,27 @@ async function generateAndSendCode(channelId, userId, client, slackTeamId, teleg
     }
   );
 }
+
+function sendSuccessMessage (channelId, slackTeamId) {
+  getSlackClientForTeam(slackTeamId, async (err, client) => {
+    if (err) {
+      console.error('Error getting Slack client:', err);
+      await sendErrorToAdmin(err);
+      return;
+    }
+    try {
+      const result = await client.chat.postMessage({
+        channel: channelId,
+        text: `Connection created successfully ✅`,
+      });
+
+    } catch (error) {
+      console.error('Error sending message to Slack:', error);
+      await sendErrorToAdmin(error);
+    }
+  });
+}
+
 
 // Function to forward Telegram messages to Slack
 function forwardTelegramMessageToSlack(msg, telegramBotId, telegramBot, telegramBots, createThread = false) {
@@ -1248,7 +1305,9 @@ function handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots) {
                             telegramBot.sendMessage(telegramChatId, 'An error occurred while creating the mapping.');
                           } else {
                             console.log("Successfully added bot")
-                            telegramBot.sendMessage(telegramChatId, 'Connection created');
+                            telegramBot.sendMessage(telegramChatId, 'Connection created successfully ✅');
+                            sendSuccessMessage(slackChannelId, slackTeamId)
+                            getAndDeleteMessageTs(slackTeamId,slackChannelId)
                           }
                         }
                       );
@@ -1271,7 +1330,8 @@ function handleTelegramMessage(msg, telegramBotId, telegramBot, telegramBots) {
                      
                     } else {
                       console.log("Successfully added bot to a multiple bot channel!")
-                      telegramBot.sendMessage(telegramChatId, 'Connection created');
+                      telegramBot.sendMessage(telegramChatId, 'Connection created successfully ✅');
+                      getAndDeleteMessageTs(slackTeamId,slackChannelId)
                       forwardTelegramMessageToSlack(msg, telegramBotId, telegramBot, telegramBots, createThread = true);
                     }
                   }
@@ -1352,5 +1412,6 @@ module.exports = {
   processBotTokenSubmission,
   getCustomBotForTeam,
   processSetupConnectionSubmission,
-  openSetupConnectionModal
+  openSetupConnectionModal,
+  processSetupConnectionSubmissionForNewThread
 };
